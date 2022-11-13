@@ -12,3 +12,4 @@ Go algorithm by Michael Fogleman: https://github.com/fogleman/physarum <br />
 Details about algorithm by Sage Jenson's: <br />
 https://cargocollective.com/sagejenson/physarum <br />
 
+![screenshots](https://github.com/AlfAleshkov/Physarum-simulation/blob/main/screenshots.jpg?raw=true)
