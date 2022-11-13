@@ -1,2 +1,3 @@
 # Physarum simulation
- Physarum simulation program. Delphi XE8
+ Physarum simulation program. Delphi XE8, Firemonkey
+ 
