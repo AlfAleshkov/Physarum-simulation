@@ -9,7 +9,7 @@ uses
   System.Math, System.DateUtils, System.Threading;
 
 const
-  NUM_OF_AGENTS = 25000;
+  NUM_OF_AGENTS = 16000;
 
 type
   TAntObj = Record
@@ -19,6 +19,7 @@ type
   End;
   TForm1 = class(TForm)
     Timer1: TTimer;
+    MakeScreenshotTimer: TTimer;
     procedure Button1Click(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
@@ -29,6 +30,7 @@ type
     procedure FormKeyDown(Sender: TObject; var Key: Word; var KeyChar: Char;
       Shift: TShiftState);
     procedure FormMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Single);
+    procedure MakeScreenshotTimerTimer(Sender: TObject);
   private
     { Private declarations }
   public
@@ -52,6 +54,8 @@ type
     procedure AgentMove(i:Integer;Data:TBitmapData;alpha_param:byte;w,h:Integer);
     procedure ShowHint(hint:string);
     procedure HintDraw(canvas:TCanvas);
+    procedure SaveScreenshot(x_count,y_count:integer;prefix:string = 'Screenshot');
+    procedure StartPosition;
   end;
 
 var
@@ -73,17 +77,17 @@ if TrailKiller and (Ant.x>Ants[1].x-50) and (Ant.x<Ants[1].x+50) and (Ant.y>Ants
   Angle:=Ant.direction + AngleOffset;
   newPosX:=Ant.x+sin(Angle)*(speed+2);
   newPosY:=Ant.y+cos(Angle)*(speed+2);
-  if newPosX>BaseBitmap.Width-1 then newPosX:=0;
-  if newPosX<0 then newPosX:=BaseBitmap.Width-1;
-  if newPosY>BaseBitmap.Height-1 then newPosY:=0;
-  if newPosY<0 then newPosY:=BaseBitmap.Height-1;
+  if newPosX>BaseBitmap.Width-1 then newPosX:=newPosX-BaseBitmap.Width+1;
+  if newPosX<0 then newPosX:=newPosX+BaseBitmap.Width-1;
+  if newPosY>BaseBitmap.Height-1 then newPosY:=newPosY-BaseBitmap.Height+1;
+  if newPosY<0 then newPosY:=newPosY+BaseBitmap.Height-1;
 Result := TAlphaColorRec(Data.GetPixel(Round(newPosX),Round(newPosY))).R;
 //if Result>100 then Result:=Result-(Result-100)*2;
 if (Result<10) and (mode = 1) then Result:=50;
 if (Result>100) and (mode = 1) then Result:=0;
-if (Result>100) and (mode = 2) then Result:=Result-(Result-100)*2;
+if (Result>128) and (mode = 2) then Result:=Result-(Result-128)*2;
 //if (Result<10) and (mode = 4) then Result:=TAlphaColorRec(Data.GetPixel(Round(newPosX),Round(newPosY))).B;
-if mode = 3 then Result:=(Result*Random(100)) div 100;
+if (Result>220) and (mode = 3) then Result:=220-(Result-220);
 end;
 
 function ARGBtoColorChannels(A, R, G, B: Byte):TAlphaColor;
@@ -102,9 +106,6 @@ type
 
 procedure Diffuse(Data: TBitmapData;w,h:Integer);
 var
-  pix: PAlphaColorArray;
-  offsetX,offsetY,sampleX,sampleY:Integer;
-  x,y,sum:integer;
   R,B:PIntArray;
 begin
 GetMem(R,w * h * SizeOf(Integer));
@@ -136,7 +137,12 @@ TParallel.&For(0,w*h-1,
 TParallel.&For(0,w*h-1,
   procedure(i:Integer)
   begin
-    Data.SetPixel(i mod w,i div w,ARGBtoColorChannels(180,R[i],0,B[i]));
+      Data.SetPixel(i mod w,i div w,ARGBtoColorChannels(Form1.alpha_param,R[i],B[i] div 2,B[i]))
+//    if (i div w + i) mod 2 = 0 then
+//      Data.SetPixel(i mod w,i div w,ARGBtoColorChannels(Form1.alpha_param,R[i],B[i] div 2,B[i]))
+//    else
+//      Data.SetPixel(i mod w,i div w,ARGBtoColorChannels(Form1.alpha_param,R[i],R[i] div 2,B[i]))
+//    //Data.SetPixel(i mod w,i div w,ARGBtoColorChannels(255,R[i],R[i],R[i]))
   end);
 FreeMem(R,w * h * SizeOf(Integer));
 FreeMem(B,w * h * SizeOf(Integer));
@@ -157,9 +163,13 @@ if KillWeak and (r = 0)then begin
   Ants[i].y:=h div 2;
   r:=200;
   end;
-r:=r+20;
-if r>200 then r:=200;
-Data.SetPixel(Round(Ants[i].x),Round(Ants[i].y),ARGBtoColorChannels(alpha_param,r,Ants[i].Gcolor,Ants[i].Gcolor div 2 + 128));
+if r+20>255 then r:=255 else r:=r+20;
+//Data.SetPixel(Round(Ants[i].x),Round(Ants[i].y),ARGBtoColorChannels(alpha_param,r,r,r));
+if r<120 then
+    Data.SetPixel(Round(Ants[i].x),Round(Ants[i].y),ARGBtoColorChannels(alpha_param,r,20,255))
+  else
+    Data.SetPixel(Round(Ants[i].x),Round(Ants[i].y),ARGBtoColorChannels(alpha_param,r,Ants[i].Gcolor,Ants[i].Gcolor div 2 + 60));
+//Data.SetPixel(Round(Ants[i].x),Round(Ants[i].y),ARGBtoColorChannels(alpha_param,r,Ants[i].Gcolor,(255-r) div 2 + 128 ));
 if TrailKiller and (i = 1) then
   Data.SetPixel(Round(Ants[i].x),Round(Ants[i].y),$FFFFFFFF);
 
@@ -174,7 +184,7 @@ end else if weights[3]>weights[1] then begin
   Ants[i].direction:=Ants[i].direction-settings_angle;
 end else if weights[3]<weights[1] then begin
   Ants[i].direction:=Ants[i].direction+settings_angle;
-end else Ants[i].direction:=Ants[i].direction+random(3)*0.2-0.2;
+end else Ants[i].direction:=Ants[i].direction+random(3)*0.1-0.1;
 
 if Ants[i].direction>2*pi then Ants[i].direction:=Ants[i].direction-2*pi;
 if Ants[i].direction<0 then Ants[i].direction:=Ants[i].direction+2*pi;
@@ -190,10 +200,10 @@ if respawn_mode then begin
       Ants[i].y:=h div 2;
     end;
   end else begin
-    if Ants[i].x>w-1 then Ants[i].x:=0;
-    if Ants[i].x<0 then Ants[i].x:=w-1;
-    if Ants[i].y>h-1 then Ants[i].y:=0;
-    if Ants[i].y<0 then Ants[i].y:=h-1;
+    if Ants[i].x>w-1 then Ants[i].x:=Ants[i].x-w+1;
+    if Ants[i].x<0 then Ants[i].x:=Ants[i].x+w-1;
+    if Ants[i].y>h-1 then Ants[i].y:=Ants[i].y-h+1;
+    if Ants[i].y<0 then Ants[i].y:=Ants[i].y+h-1;
   end;
 //Data.SetPixel(Round(Ants[i].x),Round(Ants[i].y),ARGBtoColorChannels(alpha_param,r,Ants[i].Gcolor,255));
 if TrailKiller and (i = 1) then
@@ -204,13 +214,11 @@ procedure TForm1.Button1Click(Sender: TObject);
 var
   bmp:TBitmap;
   Data: TBitmapData;
-  i:Integer;
 begin
 bmp:= BaseBitmap;
 //Blur(nil,bmp,1);
 //if Timer1.Tag = 1 then Blur(nil,bmp,2);
 //Timer1.Tag := (Timer1.Tag+1)mod 2;
-
 bmp.Map(TMapAccess.ReadWrite, Data);
 Diffuse(Data,bmp.Width,bmp.Height);
 //NUM_OF_AGENTS
@@ -234,11 +242,26 @@ begin
 BaseBitmap.Free;
 end;
 
-procedure TForm1.FormCreate(Sender: TObject);
+procedure TForm1.StartPosition;
 var
   i:word;
 begin
-speed:=1.7;
+for i := 1 to NUM_OF_AGENTS do begin
+//  Ants[i].x:=Random(BaseBitmap.Width);
+//  Ants[i].y:=Random(BaseBitmap.Height);
+  Ants[i].direction:=i*2*pi/NUM_OF_AGENTS;
+  Ants[i].x:=BaseBitmap.width div 2+sin(Ants[i].direction)*20;
+  Ants[i].y:=BaseBitmap.height div 2+cos(Ants[i].direction)*20;
+  Ants[i].Gcolor:=Random(100)+50;
+  end;
+BaseBitmap.Canvas.BeginScene;
+BaseBitmap.Canvas.Clear($FF000000);
+BaseBitmap.Canvas.EndScene;
+end;
+
+procedure TForm1.FormCreate(Sender: TObject);
+begin
+speed:=1.3;
 settings_angle:=0.3;
 alpha_param:=180;
 stillmove:=true;
@@ -247,17 +270,7 @@ respawn_mode:=true;
 TrailKiller:=false;
 KillWeak:=false;
 BaseBitmap:=TBitmap.Create(Canvas.Width ,Canvas.Height );
-for i := 1 to NUM_OF_AGENTS do begin
-//  Ants[i].x:=Random(BaseBitmap.Width);
-//  Ants[i].y:=Random(BaseBitmap.Height);
-  Ants[i].direction:=i*2*pi/NUM_OF_AGENTS;
-  Ants[i].x:=320+sin(Ants[i].direction)*20;
-  Ants[i].y:=240+cos(Ants[i].direction)*20;
-  Ants[i].Gcolor:=Random(100)+50;
-  end;
-BaseBitmap.Canvas.BeginScene;
-BaseBitmap.Canvas.Clear($FF000000);
-BaseBitmap.Canvas.EndScene;
+StartPosition;
 Canvas.Fill.Color := TAlphaColors.White;
 InstructionsText:='Physarum polycephalum simulation'#10#13 +
   'by Aleshkov A.F., https://github.com/AlfAleshkov/Physarum-simulation'#10#13 +
@@ -281,6 +294,9 @@ procedure TForm1.FormKeyDown(Sender: TObject; var Key: Word; var KeyChar: Char;
   Shift: TShiftState);
 begin
 if Key = vkF1 then ShowInstructions:= not ShowInstructions;
+if Key = vkReturn then begin
+  StartPosition;
+end;
 end;
 
 procedure TForm1.FormKeyUp(Sender: TObject; var Key: Word; var KeyChar: Char;
@@ -324,6 +340,8 @@ if KeyChar = '+' then begin
   settings_angle:=settings_angle+0.02;
   ShowHint('settings_angle: '+IntToStr(Round(settings_angle * 180/pi)));
   end;
+if KeyChar = 's' then SaveScreenshot(1,1);
+if KeyChar = 'a' then MakeScreenshotTimer.Enabled:= not MakeScreenshotTimer.Enabled;
 
 end;
 
@@ -369,6 +387,44 @@ if Hint_Show then begin
     Canvas.FillText(RectF(100,10,Canvas.Width,Canvas.Height), Hint_Text, false, 100,[],TTextAlign.Leading, TTextAlign.Leading);
   end else  Hint_Show:=false;
 end;
+end;
+
+procedure TForm1.MakeScreenshotTimerTimer(Sender: TObject);
+begin
+SaveScreenshot(1,1,'Animation');
+end;
+
+procedure TForm1.SaveScreenshot(x_count,y_count:integer;prefix:string = 'Screenshot');
+var
+  qlt:TBitmapCodecSaveParams;
+  i,j,w,h:integer;
+  bmp:TBitmap;
+  filename:string;
+begin
+ShowHint('Screenshot '+ExtractFilePath(ParamStr(0)));
+qlt.Quality:=92;
+if (x_count = 1) and (y_count = 1) then begin
+  i:=1;
+  filename:='';
+  while (FileExists(filename))or(i=1) do begin
+    filename:=ExtractFilePath(ParamStr(0))+prefix+Format('%.*d',[3, i])+'.jpg';
+    inc(i);
+    end;
+  BaseBitmap.SaveToFile(filename,@qlt);
+  exit;
+end;
+bmp:=TBitmap.Create(BaseBitmap.Width*x_count,BaseBitmap.Height*y_count);
+w:=BaseBitmap.Width;
+h:=BaseBitmap.Height;
+bmp.Canvas.BeginScene;
+for i := 0 to x_count-1 do
+  for j := 0 to y_count-1 do
+    bmp.Canvas.DrawBitmap(BaseBitmap,RectF(0,0,w,h),RectF(i*w,j*h,(i+1)*w,(j+1)*h),1);
+bmp.Canvas.EndScene;
+//BaseBitmap.SaveToFile(ExtractFilePath(ParamStr(0))+'Screenshot01.jpg',@qlt);
+
+bmp.SaveToFile(ExtractFilePath(ParamStr(0))+'Texture01.jpg',@qlt);
+bmp.Free
 end;
 
 end.

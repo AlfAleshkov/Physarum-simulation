@@ -20,4 +20,11 @@ object Form1: TForm1
     Left = 448
     Top = 280
   end
+  object MakeScreenshotTimer: TTimer
+    Enabled = False
+    Interval = 100
+    OnTimer = MakeScreenshotTimerTimer
+    Left = 504
+    Top = 280
+  end
 end
